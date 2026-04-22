@@ -1,2 +1,3 @@
 {:paths ["src"]
- :deps {macchiato/core {:mvn/version "0.2.22"}}}
+ :deps {macchiato/core        {:mvn/version "0.2.22"}
+        psite/macchiato-async {:local/root "../macchiato-async"}}}

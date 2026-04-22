@@ -5,8 +5,7 @@
    middleware in serving.core) containing the keys declared by
    `config-schema` here and by `psite-routing.core/config-schema`."
   (:require [clojure.edn :as edn]
-            [clojure.string :as str]
-            [clojure.walk :as w]
+            [macchiato-async.errors :as errors]
             [macchiato.util.response :as r]))
 
 (def config-schema
@@ -14,25 +13,8 @@
    [:psite-middleware/hide-errors? {:optional true} :boolean]])
 
 ;; ---------------------------------------------------------------------------
-;; Error handling (inlined from macchiato-async.errors)
+;; Local helpers
 ;; ---------------------------------------------------------------------------
-
-(defn- error-response?
-  [response]
-  (and (map? response)
-       (let [s (:status response)]
-         (and (number? s) (<= 400 s 599)))))
-
-(defn- js-error? [x] (instance? js/Error x))
-
-(defn- make-circular-safe [structure]
-  (w/postwalk
-   (fn [item]
-     (if-not (or (map? item) (vector? item) (list? item)
-                 (seq? item) (set? item) (number? item) (keyword? item))
-       (str item)
-       item))
-   structure))
 
 (defn- deep-merge [v & vs]
   (letfn [(rec-merge [v1 v2]
@@ -41,34 +23,10 @@
               v2))]
     (if (some identity vs) (reduce #(rec-merge %1 %2) v vs) (last vs))))
 
-(defn- error->map [e]
-  (let [exception-type (:type (.-data e))
-        http-status    (:status (.-data e))]
-    {:status (cond
-               (= exception-type :reitit.coercion/request-coercion) 404
-               http-status                                          http-status
-               :else                                                500)
-     :body   {:error {:name           (.-name e)
-                      :exception-type exception-type
-                      :message        (.-message e)
-                      :data           (make-circular-safe (.-data e))
-                      :stacktrace     (when (.-stack e)
-                                        (vec (str/split (.-stack e) "\n")))}}}))
-
-(defn- default-error-handler [e request]
-  (let [e-map (if (js-error? e) (error->map e) e)]
-    (-> {:status 500
-         :body   {:error   {:message "Something went wrong (500)"}
-                  :request (-> request
-                               (dissoc :reitit.core/match :reitit.core/router)
-                               make-circular-safe)}}
-        (deep-merge e-map)
-        (assoc :error? true))))
-
 (defn wrap-synchronous-exceptions
   "Catches synchronous exceptions and converts them to ring error responses.
    Optional error-handler fn [e request] → response; defaults to built-in handler."
-  ([handler] (wrap-synchronous-exceptions default-error-handler handler))
+  ([handler] (wrap-synchronous-exceptions errors/default-error-response handler))
   ([error-handler handler]
    (fn [request respond _]
      (try
@@ -85,7 +43,7 @@
   (fn [req res raise]
     ((wrap-synchronous-exceptions handler) req
      (fn [response]
-       (res (if (and (error-response? response)
+       (res (if (and (errors/error-response? response)
                      (not (:converted-error? response)))
               (-> response
                   (assoc :original-request req)
@@ -106,7 +64,7 @@
              (fn [{:keys [status] :as response}]
                (let [content-type (re-find #"^[a-z/]+"
                                            (r/get-header response "Content-type"))]
-                 (res (if (error-response? response)
+                 (res (if (errors/error-response? response)
                         (update response :headers assoc
                                 "Cache-Control" "no-cache, no-store, must-revalidate"
                                 "Expires" 0

@@ -5,6 +5,7 @@
    middleware in serving.core) containing the keys declared by
    `config-schema` here and by `psite-routing.core/config-schema`."
   (:require [clojure.edn :as edn]
+            [clojure.string :as str]
             [macchiato-async.errors :as errors]
             [macchiato.util.response :as r]))
 
@@ -104,6 +105,39 @@
                   (assoc :body (assoc data :message (.-message e)))
                   res)
               e)))))))
+
+;; ---------------------------------------------------------------------------
+;; Content Security Policy
+;; ---------------------------------------------------------------------------
+
+(defn- csp-nonce []
+  (.toString (.randomBytes (js/require "crypto") 16) "base64url"))
+
+(defn- render-csp [directives nonce]
+  (->> directives
+       (map (fn [[k vs]]
+              (str (name k) " "
+                   (str/join " " (map #(if (= % "'nonce'")
+                                         (str "'nonce-" nonce "'")
+                                         %)
+                                      vs)))))
+       (str/join "; ")))
+
+(defn wrap-csp
+  "Adds Content-Security-Policy header to all responses.
+   directives is a map of directive keyword → seq of source strings.
+   Use the literal string \"'nonce'\" as a source value to have it replaced
+   with the per-request 'nonce-<value>' token. The raw nonce string is also
+   attached as :csp-nonce on the request so templates can inject it via
+   the nonce= attribute once inline scripts are migrated."
+  [handler directives]
+  (fn [req res raise]
+    (let [nonce (csp-nonce)]
+      (handler (assoc req :csp-nonce nonce)
+               (fn [response]
+                 (res (r/header response "Content-Security-Policy"
+                                (render-csp directives nonce))))
+               raise))))
 
 (def default-messages
   {404 {:en "Not found"           :de "Nicht gefunden"}

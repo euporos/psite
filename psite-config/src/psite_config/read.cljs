@@ -6,7 +6,24 @@
 (defn obfuscate [text]
   (js/btoa (reduce str (reverse text))))
 
-(def readers {'psite-config.read/obfuscate obfuscate})
+(defn- secret-tag [tag-name]
+  {:psite/secret tag-name})
+
+(def readers {'psite-config.read/obfuscate obfuscate
+              'psite/secret              secret-tag})
+
+(defn find-unresolved-secrets
+  "Returns a vec of [path tag-name] for every #psite/secret sentinel
+  that was not replaced by a later merge layer."
+  [cfg]
+  (letfn [(walk [path x]
+            (cond
+              (and (map? x) (contains? x :psite/secret))
+              [[path (:psite/secret x)]]
+              (map? x)
+              (into [] (mapcat (fn [[k v]] (walk (conj path k) v)) x))
+              :else []))]
+    (walk [] cfg)))
 
 (defn- parse-boolean [s]
   (boolean (some-> s (.trim) (.toLowerCase) (= "true"))))

@@ -1,0 +1,5 @@
+.cpcache/
+.clj-kondo/
+target/
+.shadow-cljs/
+*.class

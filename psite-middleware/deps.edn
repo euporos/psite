@@ -1,0 +1,2 @@
+{:paths ["src"]
+ :deps {macchiato/core {:mvn/version "0.2.22"}}}

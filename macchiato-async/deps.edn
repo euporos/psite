@@ -1,0 +1,4 @@
+{:paths ["src"]
+ :deps {macchiato/core         {:mvn/version "0.2.22"}
+        macchiato/hiccups      {:mvn/version "0.4.1"}
+        com.taoensso/timbre    {:mvn/version "5.2.1"}}}

@@ -1,0 +1,3 @@
+{:paths ["src"]
+ :deps {hawk/hawk     {:mvn/version "0.2.11"}
+        medley/medley {:mvn/version "1.4.0"}}}

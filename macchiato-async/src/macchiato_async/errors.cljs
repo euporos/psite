@@ -87,7 +87,10 @@
      (-> {:status 500
           :body   {:error   {:message "Something went wrong (500)"}
                    :request (-> request
-                                (dissoc :reitit.core/match :reitit.core/router)
+                                ;; :config is the secrets-bearing map attached
+                                ;; by wrap-config (see psite-middleware
+                                ;; docstring); never embed it in a response.
+                                (dissoc :reitit.core/match :reitit.core/router :config)
                                 make-circular-safe)}}
          (deep-merge e)
          (assoc :error? true)))))

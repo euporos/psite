@@ -1,30 +1,27 @@
 (ns psite-transit.core
-  (:require [cljs-time.core :as t]
-            [cognitect.transit :as transit]
-            [goog.date]
-            [goog.object]))
+  "Transit-JSON primitives. This namespace is handler-free — bring your own.
+  For `goog.date.UtcDateTime` ↔ cljs-time round-tripping see
+  `psite-transit.cljs-time`."
+  (:require [cognitect.transit :as transit]))
 
-(deftype TimeHandler []
-  Object
-  (tag [_this _value] "cljsdt")
-  (rep [_this value] #js [(t/year value)
-                          (t/month value)
-                          (t/day value)
-                          (t/hour value)
-                          (t/minute value)
-                          (t/second value)
-                          (t/milli value)]))
+(defn make-writer
+  "Build a transit JSON writer. `opts` is passed to `cognitect.transit/writer`
+  (e.g. `{:handlers {SomeType (SomeWriteHandler.)}}`)."
+  ([]     (transit/writer :json))
+  ([opts] (transit/writer :json opts)))
 
-(def writer (transit/writer :json
-                            {:handlers {goog.date.UtcDateTime (TimeHandler.)}}))
+(defn make-reader
+  "Build a transit JSON reader. `opts` is passed to `cognitect.transit/reader`
+  (e.g. `{:handlers {\"tag\" (fn [rep] ...)}}`)."
+  ([]     (transit/reader :json))
+  ([opts] (transit/reader :json opts)))
 
-(def reader (transit/reader :json
-                            {:handlers
-                             {"cljsdt" (fn [year-to-milli]
-                                         (apply t/date-time year-to-milli))}}))
-
-(defn serialize [data]
+(defn serialize
+  "Write `data` as a transit JSON string using `writer`."
+  [writer data]
   (transit/write writer data))
 
-(defn deserialize [s]
+(defn deserialize
+  "Read a transit JSON string using `reader`."
+  [reader s]
   (transit/read reader s))

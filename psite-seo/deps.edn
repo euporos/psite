@@ -1,2 +1,2 @@
 {:paths ["src"]
- :deps {psite/psite-routing {:local/root "../psite-routing"}}}
+ :deps {}}

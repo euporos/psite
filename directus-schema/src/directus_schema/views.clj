@@ -2,7 +2,7 @@
   "Generates HoneySQL CREATE OR REPLACE VIEW maps for Directus collections
    that have associated translation tables.
 
-   Each translated collection gets a view named {collection}_v that LEFT JOINs
+   Each translated collection gets a view named {collection}_t that LEFT JOINs
    the translation table once per locale, exposing raw per-locale columns
    (e.g. title_de, title_en, title_uk) alongside the base table columns.
 
@@ -21,9 +21,9 @@
   (keyword (str (name field) "_" locale)))
 
 (defn view-name
-  "Returns the view name keyword for a collection, e.g. :concerts -> :concerts_v"
+  "Returns the view name keyword for a collection, e.g. :concerts -> :concerts_t"
   [collection]
-  (keyword (str (name collection) "_v")))
+  (keyword (str (name collection) "_t")))
 
 (defn generate-view
   "Generates a HoneySQL map for CREATE OR REPLACE VIEW for a single translated collection.

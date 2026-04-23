@@ -145,7 +145,7 @@
 
    Emits into the current namespace:
      - Per collection: (def concerts :concerts)
-     - Per translated collection: (def concerts_v :concerts_v) — view name
+     - Per translated collection: (def concerts_t :concerts_t) — view name
      - Per field:      (def concerts-id :concerts.id)
      - Translation fields under parent: (def concerts-title :concerts.title)
      - (defn as [kw] ...) — HoneySQL SELECT alias helper
@@ -174,7 +174,7 @@
         view-defs
         (for [[coll {:keys [translations]}] schema
               :when translations]
-          `(def ~(symbol (str (name coll) "_v")) ~(keyword (str (name coll) "_v"))))
+          `(def ~(symbol (str (name coll) "_t")) ~(keyword (str (name coll) "_t"))))
 
         ;; HoneySQL maps for CREATE OR REPLACE VIEW (executed at server startup)
         view-hsql (views/generate-all-views schema config)
@@ -183,7 +183,7 @@
         _ (do (println "\n[defschema] Loaded" (count schema) "collections from" snapshot-path)
               (doseq [[coll {:keys [fields translations]}] schema]
                 (println (str "  " (name coll)
-                              (when translations (str " → " (name coll) "_v"))))
+                              (when translations (str " → " (name coll) "_t"))))
                 (println (str "    fields:  " (str/join ", " (sort (map name fields)))))
                 (when translations
                   (println (str "    transl:  " (str/join ", " (sort (map name translations))))))))

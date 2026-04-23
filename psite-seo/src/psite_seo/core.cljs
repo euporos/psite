@@ -14,6 +14,7 @@
 (def robots                    m/robots)
 (def viewport                  m/viewport)
 (def charset                   m/charset)
+(def http-equiv                m/http-equiv)
 (def google-site-verification  m/google-site-verification)
 (def open-graph                m/open-graph)
 (def twitter-card              m/twitter-card)

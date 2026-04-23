@@ -1,5 +1,6 @@
 (ns psite-hiccup.core
   (:require [cljs.pprint]
+            [hiccups.runtime]
             [macchiato.util.response :as r]))
 
 (defn obfuscate-email [env-path]

@@ -18,3 +18,8 @@
 
 (defn pprint-to-string [x]
   (with-out-str (cljs.pprint/pprint x)))
+
+(defn dangerous-html
+  "Hiccup wrapper that injects HTMLSTRING via React's dangerouslySetInnerHTML."
+  [htmlstring]
+  [:div {:dangerouslySetInnerHTML {:__html htmlstring}}])

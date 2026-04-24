@@ -11,7 +11,7 @@
 
 (def config-schema
   [:map
-   [:psite-middleware/hide-errors? {:optional true} :boolean]])
+   [:psite-middleware/show-errors? {:optional true} :boolean]])
 
 ;; ---------------------------------------------------------------------------
 ;; Local helpers
@@ -145,7 +145,7 @@
 
 (defn json-converter
   "Returns a converter fn that renders error responses as JSON.
-   Reads :psite-middleware/hide-errors? from :original-request :config.
+   Reads :psite-middleware/show-errors? from :original-request :config.
 
    Options:
      :messages  {status {:locale \"text\"}} — deep-merged over default-messages,
@@ -156,13 +156,13 @@
    (let [msgs (merge-with merge default-messages messages)]
      (fn [response]
        (let [status      (:status response)
-             hide-errors? (get-in response [:original-request :config :psite-middleware/hide-errors?])
+             show-errors? (get-in response [:original-request :config :psite-middleware/show-errors?])
              message     (or (get-in response [:body :message])
                              (get msgs status))]
          (if-not message
            response
            (cond-> {:body {:message message} :status status}
-             (not hide-errors?) (assoc-in [:body :error]
+             show-errors? (assoc-in [:body :error]
                                          (-> response
                                              (get-in [:body :error])
                                              (select-keys [:message :name])))

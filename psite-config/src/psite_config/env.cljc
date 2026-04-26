@@ -7,15 +7,18 @@
      ([pointer]
       (setting server/env pointer))
      ([env pointer]
-      (let [result (cond (keyword? pointer) (get env pointer)
-                         (vector? pointer) (get-in env pointer)
-                         :else (throw (new js/Error)))]
-        (when (nil? result) (js/console.warn "Server: Got a nil config value for " (str pointer) pointer))
-        result)))
+      (let [result (cond (keyword? pointer) (get env pointer ::missing)
+                         (vector? pointer)  (get-in env pointer ::missing)
+                         :else (throw (ex-info "config pointer must be keyword or vector" {:pointer pointer})))]
+        (if (= result ::missing)
+          (do (js/console.warn "Server: missing config key " (str pointer) pointer) nil)
+          result))))
    :cljs
    (defn setting [pointer]
-     (let [result (cond (keyword? pointer) (get @browser/env pointer)
-                        (vector? pointer) (get-in @browser/env pointer)
-                        :else (throw (new js/Error)))]
-       (when (nil? result) (js/console.warn "Browser: Got a nil config value for " (str pointer)  pointer))
-       result)))
+     (let [env @browser/env
+           result (cond (keyword? pointer) (get env pointer ::missing)
+                        (vector? pointer)  (get-in env pointer ::missing)
+                        :else (throw (ex-info "config pointer must be keyword or vector" {:pointer pointer})))]
+       (if (= result ::missing)
+         (do (js/console.warn "Browser: missing config key " (str pointer) pointer) nil)
+         result))))

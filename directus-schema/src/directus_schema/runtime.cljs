@@ -5,6 +5,7 @@
   (:require
    [clojure.string :as str]
    [cljs-time.coerce :as t.coerce]
+   [cljs-time.core :as t]
    [honey.sql :as sql]
    [psite-pg.core :as pg]
    [taoensso.timbre :refer [infof errorf]]))
@@ -30,6 +31,22 @@
                            (.getFullYear d) (.getMonth d) (.getDate d)
                            (.getHours d)    (.getMinutes d) (.getSeconds d)
                            (.getMilliseconds d)))))))))
+
+(defn pg-date->cljs-time
+  "Convert a Postgres DATE value (`type 1082`) into a cljs-time DateTime at
+   UTC midnight on the same calendar day. node-postgres decodes DATE as a
+   JS Date at the host's *local* midnight; reading its UTC instant (as
+   cljs-time.coerce/from-date does) shifts the calendar day in non-UTC
+   zones — e.g. CET `2026-01-01` becomes `2025-12-31T23:00Z`. We rebuild
+   from the local components so the day is preserved regardless of TZ."
+  [v]
+  (when v
+    (let [d (cond
+              (instance? js/Date v) v
+              (string? v)           (js/Date. v)
+              :else                 nil)]
+      (when d
+        (t/date-time (.getFullYear d) (inc (.getMonth d)) (.getDate d))))))
 
 (defn ensure-views!
   "Sequentially executes a vector of CREATE OR REPLACE VIEW HoneySQL maps

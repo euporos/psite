@@ -11,7 +11,17 @@
 
 (def config-schema
   [:map
-   [:psite-middleware/show-errors? {:optional true} :boolean]])
+   [:psite-middleware/show-errors? {:optional true} :boolean]
+   [:psite-middleware/geolocation
+    {:optional true}
+    [:map
+     [:enabled?               :boolean]
+     [:provider-url           :string]
+     [:api-key                {:optional true} [:maybe :string]]
+     [:trust-x-forwarded-for? {:optional true} :boolean]
+     [:timeout-ms             {:optional true} :int]
+     [:cache-ttl-ms           {:optional true} :int]
+     [:cache-max-size         {:optional true} :int]]]])
 
 ;; ---------------------------------------------------------------------------
 ;; Local helpers
@@ -138,6 +148,119 @@
                  (res (r/header response "Content-Security-Policy"
                                 (render-csp directives nonce))))
                raise))))
+
+;; ---------------------------------------------------------------------------
+;; Geolocation
+;; ---------------------------------------------------------------------------
+
+(defn- private-ip? [ip]
+  (or (nil? ip)
+      (= ip "::1")
+      (= ip "127.0.0.1")
+      (str/starts-with? ip "10.")
+      (str/starts-with? ip "192.168.")
+      (str/starts-with? ip "::ffff:127.")
+      (str/starts-with? ip "::ffff:10.")
+      (str/starts-with? ip "::ffff:192.168.")
+      (str/starts-with? ip "fc")
+      (str/starts-with? ip "fd")
+      (when-let [m (re-find #"^(?:::ffff:)?172\.(\d+)\." ip)]
+        (let [n (js/parseInt (second m) 10)]
+          (and (>= n 16) (<= n 31))))))
+
+(defn- strip-v4-mapped [ip]
+  (when ip
+    (if (str/starts-with? ip "::ffff:") (subs ip 7) ip)))
+
+(defn client-ip
+  "Returns the public client IP from the request, or nil for private/loopback.
+   When trust-x-forwarded-for? is true, takes the first non-private entry of
+   X-Forwarded-For; otherwise uses :remote-addr."
+  [req {:keys [trust-x-forwarded-for?]}]
+  (let [candidates (concat
+                    (when trust-x-forwarded-for?
+                      (some-> (get-in req [:headers "x-forwarded-for"])
+                              (str/split #",")
+                              (->> (map str/trim))))
+                    [(:remote-addr req)])
+        public     (->> candidates
+                        (map strip-v4-mapped)
+                        (remove private-ip?)
+                        first)]
+    public))
+
+(defn- cache-get [cache ip ttl-ms]
+  (when-let [entry (.get cache ip)]
+    (if (< (- (.now js/Date) (.-t entry)) ttl-ms)
+      entry
+      (do (.delete cache ip) nil))))
+
+(defn- cache-put [cache ip country max-size]
+  (when (>= (.-size cache) max-size)
+    (let [first-key (.. cache keys next -value)]
+      (when first-key (.delete cache first-key))))
+  (.set cache ip #js {:c country :t (.now js/Date)}))
+
+(defn- abort-controller [timeout-ms]
+  (let [ctl (js/AbortController.)]
+    (js/setTimeout #(.abort ctl) timeout-ms)
+    ctl))
+
+(defn lookup-country!
+  "Fetches the ISO 3166-1 alpha-2 country code for ip from an HTTP service.
+   Uses an in-memory TTL cache. Calls (callback country-code-or-nil) when done.
+   Failures (timeout, non-2xx, parse error) resolve to nil and are cached."
+  [ip {:keys [provider-url api-key timeout-ms cache cache-ttl-ms cache-max-size]
+       :or   {timeout-ms     3000
+              cache-ttl-ms   (* 24 60 60 1000)
+              cache-max-size 10000}}
+   callback]
+  (if-let [hit (cache-get cache ip cache-ttl-ms)]
+    (callback (.-c hit))
+    (let [url (cond-> (str/replace provider-url "%s" (js/encodeURIComponent ip))
+                (seq api-key) (str (if (str/includes? provider-url "?") "&" "?")
+                                   "key=" (js/encodeURIComponent api-key)))
+          ctl (abort-controller timeout-ms)
+          done (fn [country]
+                 (cache-put cache ip country cache-max-size)
+                 (callback country))]
+      (-> (js/fetch url #js {:signal (.-signal ctl)
+                             :headers #js {"Accept" "application/json"
+                                           "User-Agent" "psite-geolocation/1"}})
+          (.then (fn [resp]
+                   (if (.-ok resp)
+                     (.then (.json resp)
+                            (fn [body]
+                              (let [cc (or (.-country_code body)
+                                           (.-country body))]
+                                (done (when (and cc (= 2 (.-length cc)))
+                                        (.toUpperCase cc))))))
+                     (done nil))))
+          (.catch (fn [_e] (done nil)))))))
+
+(defn wrap-geolocation
+  "Resolves the client country code via an HTTP service and attaches it as
+   :country-code (uppercase ISO 3166-1 alpha-2) on the request. Skips lookup
+   for private/loopback IPs. Failures are silent — handler still runs.
+
+   When :enabled? is false, the wrapper is a no-op.
+
+   Reads runtime settings from `(get-in req [:config :psite-middleware/geolocation])`.
+   The wrap factory closes over a single in-memory cache shared across requests."
+  [handler]
+  (let [cache (js/Map.)]
+    (fn [req res raise]
+      (let [{:keys [enabled?] :as opts}
+            (get-in req [:config :psite-middleware/geolocation])
+            opts (assoc opts :cache cache)]
+        (if-not enabled?
+          (handler req res raise)
+          (if-let [ip (client-ip req opts)]
+            (lookup-country!
+             ip opts
+             (fn [cc]
+               (handler (cond-> req cc (assoc :country-code cc)) res raise)))
+            (handler req res raise)))))))
 
 (def default-messages
   {404 {:en "Not found"           :de "Nicht gefunden"}

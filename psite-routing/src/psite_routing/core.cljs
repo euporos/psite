@@ -9,8 +9,9 @@
 
 (def config-schema
   [:map
-   [:psite-routing/devmode?        {:optional true} :boolean]
-   [:psite-routing/locale-fallback [:sequential :keyword]]])
+   [:psite-routing/devmode?         {:optional true} :boolean]
+   [:psite-routing/locale-fallback  [:sequential :keyword]]
+   [:psite-routing/country->locale  {:optional true} [:map-of :string :keyword]]])
 
 (defn make-path-absolute [req relative-path]
   (let [protocol (if (get-in req [:config :psite-routing/devmode?]) "http" "https")
@@ -22,19 +23,24 @@
 
 (defn coerce-locale [req]
   (let [fallback       (get-in req [:config :psite-routing/locale-fallback])
+        country->loc   (get-in req [:config :psite-routing/country->locale])
         default-locale (first fallback)
         locale-set     (set fallback)
-        found
-        (some (fn [[_ f]] (when-let [r (f req)] r))
-              [["injected"      #(get-in % [:locale])]
-               ["reitit path"   #(get-in % [:parameters :path :locale])]
-               ["analysed path" #(keyword (get-in % [:path-params :locale]))]
-               ["raw path"      #(keyword (second (re-find #"^/([a-z]+)/"
-                                                           (or (get % :uri) ""))))]
-               ["cookie"        #(keyword (get-in % [:cookies "locale" :value]))]
-               ["header"        #(keyword (re-find #"^[a-z]+"
-                                                   (or (get-in % [:headers "accept-language"]) "")))]])]
-    (locale-set found default-locale)))
+        ;; Each step returns a candidate locale (or nil). Steps are tried in
+        ;; order; the first one whose result is in `locale-set` wins. Steps
+        ;; that yield an unsupported locale fall through to the next step
+        ;; rather than short-circuiting to default.
+        steps [#(get % :locale)
+               #(get-in % [:parameters :path :locale])
+               #(keyword (get-in % [:path-params :locale]))
+               #(keyword (second (re-find #"^/([a-z]+)/" (or (:uri %) ""))))
+               #(keyword (get-in % [:cookies "locale" :value]))
+               #(keyword (re-find #"^[a-z]+"
+                                  (or (get-in % [:headers "accept-language"]) "")))
+               #(when-let [cc (:country-code %)]
+                  (when country->loc (country->loc cc)))]]
+    (or (some #(locale-set (% req)) steps)
+        default-locale)))
 
 (defn wrap-locale
   "Coerces locale from request and attaches it as :locale.

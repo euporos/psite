@@ -48,21 +48,41 @@
       (when d
         (t/date-time (.getFullYear d) (inc (.getMonth d)) (.getDate d))))))
 
+(defn- view-name-of
+  "Extracts the view name keyword from a :create-view HoneySQL clause that may
+   be `[:or-replace name]`, `[name]`, or a bare name keyword."
+  [view]
+  (let [cv (:create-view view)]
+    (cond
+      (keyword? cv) cv
+      (and (vector? cv) (= :or-replace (first cv))) (second cv)
+      (vector? cv) (first cv)
+      :else nil)))
+
 (defn ensure-views!
-  "Sequentially executes a vector of CREATE OR REPLACE VIEW HoneySQL maps
-   (typically `directus-schema.core/view-defs` from the consumer) against the
-   given pg pool. Returns a js/Promise that resolves once all views are tried."
+  "Drops and recreates each translation view. We DROP ... CASCADE before CREATE
+   instead of relying on CREATE OR REPLACE because Postgres' OR REPLACE rejects
+   any change that reorders or removes columns — adding a new locale shifts the
+   per-locale column interleave (name_de, name_en, name_uk → name_de, name_en,
+   name_uk, name_it) and would otherwise silently fail. Returns a js/Promise
+   that resolves once all views are processed."
   [pool view-defs]
-  (infof "Creating %d translation views..." (count view-defs))
+  (infof "Recreating %d translation views..." (count view-defs))
   (reduce
    (fn [chain view]
      (.then chain
             (fn [_]
-              (let [[stmt] (sql/format view)]
+              (let [vname (view-name-of view)
+                    drop-sql (str "DROP VIEW IF EXISTS \""
+                                  (str/replace (name vname) "\"" "\"\"")
+                                  "\" CASCADE")
+                    [stmt] (sql/format view)]
                 (infof "  SQL: %s" (subs stmt 0 (min 120 (count stmt))))
-                (-> (pg/query pool view)
-                    (.then  (fn [_] (infof "  View created OK")))
-                    (.catch (fn [e] (errorf "View creation FAILED: %s" (.-message e)))))))))
+                (-> (.query pool drop-sql)
+                    (.then (fn [_] (pg/query pool view)))
+                    (.then  (fn [_] (infof "  View %s recreated OK" vname)))
+                    (.catch (fn [e] (errorf "View %s recreation FAILED: %s"
+                                            vname (.-message e)))))))))
    (js/Promise.resolve nil)
    view-defs))
 

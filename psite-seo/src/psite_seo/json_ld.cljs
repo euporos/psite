@@ -49,7 +49,7 @@
 (defn ld
   "Wrap a schema.org map (or vector of maps) in a
   <script type=application/ld+json>. Vector input is emitted as a single
-  @graph so multiple entities share one tag. Nils and empty collections
+  `@graph` so multiple entities share one tag. Nils and empty collections
   are stripped recursively from anywhere in the tree. Returns nil if the
   input strips down to nothing."
   [data]

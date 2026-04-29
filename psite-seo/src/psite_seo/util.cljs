@@ -31,8 +31,11 @@
       (str/replace "</" "<\\/")))
 
 (defn script-tag
-  "Hiccup [:script {:type application/ld+json} <json>]. Uses a plain string
-  child, not :dangerouslySetInnerHTML — correct for server hiccup."
+  "Hiccup [:script {:type application/ld+json} ...]. Emits the JSON via
+  :dangerouslySetInnerHTML so the string content is not HTML-escaped —
+  browsers do not decode entities inside <script>, so escaped quotes
+  (&quot;) would otherwise leave the JSON-LD unparseable. Both hiccups
+  (server) and React (client) special-case this attribute."
   [data]
-  [:script {:type "application/ld+json"}
-   (json-ld-string data)])
+  [:script {:type "application/ld+json"
+            :dangerouslySetInnerHTML {:__html (json-ld-string data)}}])

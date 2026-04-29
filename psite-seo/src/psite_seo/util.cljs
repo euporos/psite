@@ -31,11 +31,25 @@
       (str/replace "</" "<\\/")))
 
 (defn script-tag
-  "Hiccup [:script {:type application/ld+json} ...]. Emits the JSON via
-  :dangerouslySetInnerHTML so the string content is not HTML-escaped —
-  browsers do not decode entities inside <script>, so escaped quotes
-  (&quot;) would otherwise leave the JSON-LD unparseable. Both hiccups
-  (server) and React (client) special-case this attribute."
+  "Emit <script type=application/ld+json>JSON</script> as raw HTML.
+
+  The naive form [:script {:type \"application/ld+json\"} json-string]
+  fails on both sides of the divide:
+    - macchiato/hiccups (server) escapes string children unconditionally,
+      turning \" into &quot;. Browsers do NOT decode entities inside a
+      <script> raw-text element, so the JSON-LD parser sees &quot; and
+      rejects it.
+    - React's :dangerouslySetInnerHTML wraps correctly, but hiccups'
+      implementation of that attribute discards the wrapping tag entirely
+      and emits only the __html — stripping the <script> wrapper.
+
+  Workaround: pre-render the full <script>…</script> string and pass it
+  through :dangerouslySetInnerHTML on a dummy element. Hiccups discards
+  the dummy wrapper and emits our raw script tag verbatim; React renders
+  the dummy as a real element containing the raw script tag — also valid
+  HTML for ld+json since it ignores nested layout."
   [data]
-  [:script {:type "application/ld+json"
-            :dangerouslySetInnerHTML {:__html (json-ld-string data)}}])
+  (let [html (str "<script type=\"application/ld+json\">"
+                  (json-ld-string data)
+                  "</script>")]
+    [:span {:dangerouslySetInnerHTML {:__html html}}]))

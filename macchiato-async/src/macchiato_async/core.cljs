@@ -116,7 +116,14 @@
   ([handler-name handler-fn]
    (fn [req res raise]
      (try
-       (let [req (assoc req :af-token af/*anti-forgery-token*)]
+       ;; Prefer the token threaded onto the request map by wrap-anti-forgery;
+       ;; fall back to the dynamic var. The var is only bound for the
+       ;; synchronous portion of the handler chain, so when async middleware
+       ;; (e.g. an auth check that awaits a DB lookup) sits between
+       ;; wrap-anti-forgery and this wrapper, the binding has already unwound
+       ;; and the var reads nil. The request-map value survives that boundary.
+       (let [req (assoc req :af-token (or (:anti-forgery-token req)
+                                          af/*anti-forgery-token*))]
          (handle-response req res handler-name (handler-fn req)))
        (catch js/Error e
          (errorf "Sync exception in handler %s: %s"

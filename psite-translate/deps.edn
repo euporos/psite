@@ -1,0 +1,3 @@
+{:paths ["src"]
+ :deps {psite/macchiato-async       {:local/root "../macchiato-async"}
+        kitchen-async/kitchen-async {:mvn/version "0.1.0-SNAPSHOT"}}}

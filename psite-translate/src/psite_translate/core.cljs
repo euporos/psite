@@ -103,7 +103,10 @@
           (.-jobId json))))))
 
 (defn- gateway-poll-job
-  "GET /jobs/:id (no key needed). Resolves to {:status :translations :error}."
+  "GET /jobs/:id (no key needed). Resolves to
+   {:status :translations :invalid :error}. :invalid is the list of target codes
+   whose HTML the gateway could not validate/repair; it withholds those from
+   :translations, so we never save them and instead report them upward."
   [cfg job-id]
   (p/let [resp (js/fetch (str (gateway-base cfg) "/jobs/" (js/encodeURIComponent job-id)))]
     (if-not (.-ok resp)
@@ -112,6 +115,7 @@
       (p/let [json (.json resp)]
         {:status       (.-status json)
          :translations (js->clj (.-translations json))
+         :invalid      (js->clj (.-invalid json))
          :error        (.-error json)}))))
 
 ;; ---------------------------------------------------------------------------
@@ -247,7 +251,7 @@
           ctx    (get @jobs job-id)]
       (if (nil? ctx)
         (json-response 404 {:error "unknown or expired job"})
-        (p/let [{:keys [status translations error]} (gateway-poll-job cfg job-id)]
+        (p/let [{:keys [status translations invalid error]} (gateway-poll-job cfg job-id)]
           (cond
             (= status "done")
             (p/let [{:keys [coll-cfg pk field langs de-status]} ctx
@@ -256,7 +260,11 @@
                                    :when (not (blank? val))]
                                (upsert-translation! cfg coll-cfg pk field lang val de-status)))]
               (swap! jobs dissoc job-id)
-              (json-response 200 {:status "done"}))
+              ;; :invalid → target codes whose HTML the gateway rejected; they were
+              ;; withheld (never saved). Surface them so the dashboard can flag the
+              ;; unit as partially done rather than silently skipping.
+              (json-response 200 {:status  "done"
+                                  :invalid (vec (filter (set langs) invalid))}))
 
             (= status "error")
             (do (swap! jobs dissoc job-id)

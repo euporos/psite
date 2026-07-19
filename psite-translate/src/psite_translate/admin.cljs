@@ -58,7 +58,11 @@
  :translate/run-unit
  (fn [{:keys [start-url job-url csrf unit]}]
    (let [id   (unit-id unit)
-         done #(rf/dispatch [::step-done id :ok])
+         ;; :invalid (target codes whose HTML the gateway rejected and withheld)
+         ;; turns an otherwise-ok unit into a :warn — the other langs were saved,
+         ;; these were not, so the field stays a gap for a manual fix/retry.
+         done (fn [invalid]
+                (rf/dispatch [::step-done id (if (seq invalid) [:warn (vec invalid)] :ok)]))
          err  (fn [msg] (rf/dispatch [::step-done id [:error msg]]))
          poll (fn poll [job-id]
                 (-> (js/fetch (str job-url "?id=" (js/encodeURIComponent job-id))
@@ -71,7 +75,7 @@
                                       (fn [j]
                                         (let [m (js->clj j :keywordize-keys true)]
                                           (case (:status m)
-                                            "done"  (done)
+                                            "done"  (done (:invalid m))
                                             "error" (err (or (:error m) "Fehler"))
                                             (js/setTimeout #(poll job-id) 2000))))))))
                     (.catch (fn [e] (err (.-message e))))))]
@@ -246,10 +250,18 @@
 
 (defn- status-tag [result]
   (cond
-    (nil? result)    [:span.admin__status "…"]
-    (= result :ok)   [:span.admin__status.admin__status--ok "✓"]
-    (vector? result) [:span.admin__status.admin__status--error {:title (second result)} "Fehler"]
-    :else            [:span.admin__status "?"]))
+    (nil? result)  [:span.admin__status "…"]
+    (= result :ok) [:span.admin__status.admin__status--ok "✓"]
+    (vector? result)
+    (case (first result)
+      ;; withheld invalid HTML — inline colour so no site-side CSS is required.
+      :warn [:span.admin__status
+             {:style {:color "#b45309" :font-weight "bold"}
+              :title (str "Ungültiges HTML, nicht gespeichert: "
+                          (str/join ", " (map lang-label (second result))))}
+             "HTML ⚠"]
+      [:span.admin__status.admin__status--error {:title (second result)} "Fehler"])
+    :else [:span.admin__status "?"]))
 
 (defn- unit-row [unit rod?]
   (let [selected @(rf/subscribe [::selected])

@@ -1,3 +1,6 @@
 {:paths ["src"]
- :deps {psite/macchiato-async       {:local/root "../macchiato-async"}
+ ;; Sibling pinned by SHA, not :local/root — see psite-middleware/deps.edn.
+ :deps {psite/macchiato-async       {:git/url "git@github.com:euporos/psite.git"
+                                     :git/sha "fef48d995a25bb8114ec9449844a62d003b33221"
+                                     :deps/root "macchiato-async"}
         kitchen-async/kitchen-async {:mvn/version "0.1.0-SNAPSHOT"}}}

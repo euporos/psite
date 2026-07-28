@@ -1,3 +1,8 @@
 {:paths ["src"]
  :deps {macchiato/core        {:mvn/version "0.2.22"}
-        psite/macchiato-async {:local/root "../macchiato-async"}}}
+        ;; Pin sibling by SHA, not :local/root: when this lib is consumed as a
+        ;; gitlib, :local/root resolves inside the checkout and silently
+        ;; overrides the consumer's own pin of the sibling.
+        psite/macchiato-async {:git/url "git@github.com:euporos/psite.git"
+                               :git/sha "fef48d995a25bb8114ec9449844a62d003b33221"
+                               :deps/root "macchiato-async"}}}

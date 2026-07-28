@@ -4,4 +4,7 @@
         metosin/reitit                        {:mvn/version "0.5.17"}
         com.andrewmcveigh/cljs-time           {:mvn/version "0.5.2"}
         com.taoensso/timbre                   {:mvn/version "5.2.1"}
-        psite/psite-pg                        {:local/root "../psite-pg"}}}
+        ;; Sibling pinned by SHA, not :local/root — see psite-middleware/deps.edn.
+        psite/psite-pg                        {:git/url "git@github.com:euporos/psite.git"
+                                              :git/sha "3e7c5013372b095f807de0fadf3da544052c1995"
+                                              :deps/root "psite-pg"}}}
